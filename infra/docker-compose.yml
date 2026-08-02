@@ -1,0 +1,93 @@
+version: "3.9"
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: andika
+      POSTGRES_PASSWORD: andika
+      POSTGRES_DB: andika
+    ports:
+      - "5432:5432"
+    volumes:
+      - andika-postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U andika"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  api:
+    build:
+      context: ../services/api
+    command: python manage.py runserver 0.0.0.0:8000
+    volumes:
+      - ../services/api:/app
+    ports:
+      - "8000:8000"
+    environment:
+      - DJANGO_SETTINGS_MODULE=andika.settings.dev
+      - DATABASE_URL=postgres://andika:andika@postgres:5432/andika
+      - REDIS_URL=redis://redis:6379/0
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+  celery-worker:
+    build:
+      context: ../services/api
+    command: celery -A andika worker -l info
+    volumes:
+      - ../services/api:/app
+    environment:
+      - DJANGO_SETTINGS_MODULE=andika.settings.dev
+      - DATABASE_URL=postgres://andika:andika@postgres:5432/andika
+      - REDIS_URL=redis://redis:6379/0
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+  celery-beat:
+    build:
+      context: ../services/api
+    command: celery -A andika beat -l info
+    volumes:
+      - ../services/api:/app
+    environment:
+      - DJANGO_SETTINGS_MODULE=andika.settings.dev
+      - DATABASE_URL=postgres://andika:andika@postgres:5432/andika
+      - REDIS_URL=redis://redis:6379/0
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+  web:
+    build:
+      context: ../apps/web
+    command: npm run dev -- --host 0.0.0.0
+    volumes:
+      - ../apps/web:/app
+      - /app/node_modules
+    ports:
+      - "5173:5173"
+    environment:
+      - VITE_API_BASE_URL=http://localhost:8000
+
+volumes:
+  andika-postgres-data:
