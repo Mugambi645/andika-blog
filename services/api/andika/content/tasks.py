@@ -2,6 +2,9 @@ from io import BytesIO
 from celery import shared_task
 from django.core.files.base import ContentFile
 from PIL import Image
+from django.utils import timezone
+
+from .models import Post
 
 RESPONSIVE_WIDTHS = [400, 800, 1200, 1600]
 
@@ -44,3 +47,22 @@ def compress_uploaded_image(post_id: int) -> None:
             filename = f"posts/responsive/{post.slug}-{width}.{ext}"
             content = ContentFile(buffer.getvalue())
             post.featured_image.storage.save(filename, content)
+
+
+@shared_task
+def publish_scheduled_posts() -> int:
+    """Flip any due scheduled post to published.
+Idempotent: re-running this task when nothing is due does nothing,
+and a post already published is never touched twice, so running it
+slightly more often than necessary is harmless.
+"""
+    due = Post.objects.filter(
+        status=Post.Status.SCHEDULED,
+        published_at__lte=timezone.now(),
+    )
+    count = due.count()
+    for post in due:
+        post.status = Post.Status.PUBLISHED
+        post.save(update_fields=["status"])
+    return count
+

@@ -98,6 +98,16 @@ SPECTACULAR_SETTINGS = {
 }
 
 # Celery Configuration
+
+
+CELERY_BEAT_SCHEDULE = {
+"publish-scheduled-posts": {
+"task": "andika.content.tasks.publish_scheduled_posts",
+"schedule": 60.0, # every 60 seconds
+},
+}
+
+
 CELERY_BROKER_URL = env("REDIS_URL", default="redis://localhost:6379/0")
 CELERY_RESULT_BACKEND = env("REDIS_URL", default="redis://localhost:6379/0")
 CELERY_ACCEPT_CONTENT = ["json"]
