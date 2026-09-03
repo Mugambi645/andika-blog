@@ -1,6 +1,6 @@
 from rest_framework import serializers
 from .models import Page, Post, Tag
-
+from .tasks import compress_uploaded_image
 
 class TagSerializer(serializers.ModelSerializer):
     class Meta:
@@ -52,6 +52,20 @@ class PostWriteSerializer(serializers.ModelSerializer):
             "language",
         ]
 
+        def create(self, validated_data):
+            post = super().create(validated_data)
+            if post.featured_image:
+                compress_uploaded_image.delay(post.id)
+            return post
+
+        def update(self, instance, validated_data):
+            had_image = bool(instance.featured_image)
+            post = super().update(instance, validated_data)
+            if post.featured_image and (
+                not had_image or "featured_image" in validated_data
+            ):
+                compress_uploaded_image.delay(post.id)
+            return post
 
 class PageSerializer(serializers.ModelSerializer):
     class Meta:
